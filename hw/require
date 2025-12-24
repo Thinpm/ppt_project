@@ -1,0 +1,257 @@
+môn: Computational Methods for Engineers
+bài tập:  Xem Chương 11, sách Rubin H. Landau, Manuel J. Paez, Cristian C. Bordeianu (2024) 
+    "Computational Physics: Problem Solving with Python", 4th Edition
+và thực hiện các yêu cầu sau:
+1. Phát biểu bài toán trong "11.2.3 Training A Simple Network" dưới dạng bài toán tối ưu.
+2. Trình bày lại mục "11.2.4 Decreasing the Error" dưới dạng Backpropagation và làm rõ các chi tiết tính toán.
+3. Thực hiện các yêu cầu trong mục "11.2.5 Coding and Running A Simple Network". Không dùng thư viện có sẵn, bạn có thể thay thế hàm "np.apply_along_axis" trong SimpleNet.py (đính kèm) bằng hàm tương đương do bạn lập trình tường minh không?
+4. Bạn có thể áp dụng các phương pháp tối ưu  Conjugate Gradient (Polak-Ribière), BFGS, Newton để giải bài toán với các mô hình network ở (3) không? Nếu có, hãy chọn một phương pháp, thực hiện và so sánh hiệu quả.
+5. Tìm một ứng dụng cho mô hình network trên và chạy chương trình minh họa. 
+đây là mong muốn của thầy 1) phải tính được gradient hàm loss, tức là phải xác định hàm loss phụ thuộc các biến nào khi đi cực tiểu nó. 2) phải viết code và chạy được, tức là không nói suông. 3) thiết kế code có tính thích nghi, tức là khi thêm bớt layer hoặc số lượng tham số thì code vẫn chạy được mà không phải viết lại.
+Ok Thuy, **mong muốn của thầy rất rõ và hoàn toàn “chuẩn học thuật”**, mình sẽ **dịch chính xác mong muốn đó → thành cách làm cụ thể**, để khi Thuy **viết báo cáo + code**, thầy **không bắt bẻ được**.
+
+Mình trình bày **theo đúng 3 ý thầy yêu cầu**, và mỗi ý đều có:
+
+* 👉 **tư duy**
+* 👉 **cách trình bày trong báo cáo**
+* 👉 **cách hiện thực trong code**
+
+---
+
+# 1️⃣ “Phải tính được gradient hàm loss”
+
+> ❗ Không được coi network là “hộp đen”
+
+## 1.1 Thầy đang kiểm tra điều gì?
+
+Thầy muốn thấy rằng:
+
+* Em **biết chính xác**:
+
+  * Hàm loss là gì
+  * Nó **phụ thuộc vào biến nào**
+* Khi nói “tối ưu”, em **thực sự lấy đạo hàm theo các biến đó**
+
+---
+
+## 1.2 Cách phát biểu đúng trong báo cáo
+
+### (a) Xác định biến tối ưu
+
+Giả sử network có:
+
+* (L) layers
+* Mỗi layer (l) có:
+
+  * Trọng số (W^{(l)})
+  * Bias (b^{(l)})
+
+👉 **Tập biến tối ưu là**:
+[
+\Theta = {W^{(1)}, b^{(1)}, \dots, W^{(L)}, b^{(L)}}
+]
+
+---
+
+### (b) Hàm loss phụ thuộc gì?
+
+Với dữ liệu:
+[
+{(x^{(k)}, y^{(k)})}_{k=1}^N
+]
+
+Output mạng:
+[
+\hat{y}^{(k)} = f_\Theta(x^{(k)})
+]
+
+Hàm loss:
+[
+\boxed{
+\mathcal{L}(\Theta)
+= \frac{1}{2}\sum_{k=1}^N
+|\hat{y}^{(k)} - y^{(k)}|^2
+}
+]
+
+👉 **Viết rõ**:
+
+> “Bài toán tối ưu là tìm (\Theta) sao cho (\mathcal{L}(\Theta)) đạt cực tiểu.”
+
+---
+
+## 1.3 Gradient được tính như thế nào (Backprop tổng quát)
+
+Với mỗi layer (l):
+
+[
+\frac{\partial \mathcal{L}}{\partial W^{(l)}}
+= \delta^{(l)} (a^{(l-1)})^T
+]
+
+[
+\frac{\partial \mathcal{L}}{\partial b^{(l)}}
+= \delta^{(l)}
+]
+
+Trong đó:
+
+* (a^{(l)}): output layer (l)
+* (\delta^{(l)}): sai số lan truyền ngược
+
+👉 **Chốt câu ăn điểm**:
+
+> “Gradient được tính hoàn toàn bằng quy tắc dây chuyền, không sử dụng thư viện học máy.”
+
+---
+
+# 2️⃣ “Phải viết code và chạy được – không nói suông”
+
+## 2.1 Nguyên tắc code để thầy không bắt bẻ
+
+❌ Sai (thầy ghét):
+
+* Chỉ ghi công thức
+* Code giả (pseudo-code)
+* Dùng sklearn / keras
+
+✅ Đúng:
+
+* Code Python chạy thật
+* In loss giảm theo epoch
+* Có output / plot
+
+---
+
+## 2.2 Cấu trúc code nên dùng (rất quan trọng)
+
+```text
+network/
+│
+├── layers.py        # Dense layer, activation
+├── loss.py          # MSE + gradient
+├── network.py       # NeuralNetwork class
+├── optimizers.py    # GD, BFGS (tuỳ chọn)
+└── main.py          # chạy demo
+```
+
+👉 **Thầy nhìn là thấy tư duy thiết kế**
+
+---
+
+## 2.3 Ví dụ code TỐI THIỂU nhưng “chuẩn”
+
+### Layer tổng quát (không fix số neuron)
+
+```python
+class DenseLayer:
+    def __init__(self, n_in, n_out):
+        self.W = np.random.randn(n_out, n_in)
+        self.b = np.zeros(n_out)
+
+    def forward(self, x):
+        self.x = x
+        return self.W @ x + self.b
+
+    def backward(self, grad_out, lr):
+        grad_W = np.outer(grad_out, self.x)
+        grad_b = grad_out
+        grad_x = self.W.T @ grad_out
+
+        self.W -= lr * grad_W
+        self.b -= lr * grad_b
+        return grad_x
+```
+
+👉 **Gradient xuất hiện rõ ràng → đúng ý (1)**
+👉 **Code chạy thật → đúng ý (2)**
+
+---
+
+# 3️⃣ “Code phải có tính thích nghi (adaptive design)”
+
+> ❗ Đây là chỗ nhiều sinh viên **chết điểm**
+
+## 3.1 Thầy không muốn gì?
+
+❌ Thầy KHÔNG muốn:
+
+```python
+y = sigmoid(w1*x1 + w2*x2 + b)
+```
+
+→ hard-code, thêm neuron là viết lại
+
+---
+
+## 3.2 Thầy MUỐN thấy gì?
+
+✅ Thầy muốn:
+
+* Thêm layer → không sửa code huấn luyện
+* Thay số neuron → không viết lại backprop
+
+👉 **Giải pháp duy nhất**:
+
+### 👉 **OOP + danh sách layer**
+
+---
+
+## 3.3 Thiết kế Network “chuẩn thầy thích”
+
+```python
+class NeuralNetwork:
+    def __init__(self, layers):
+        self.layers = layers
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer.forward(x)
+        return x
+
+    def backward(self, grad, lr):
+        for layer in reversed(self.layers):
+            grad = layer.backward(grad, lr)
+```
+
+---
+
+## 3.4 Thêm / bớt layer như thế nào?
+
+```python
+net = NeuralNetwork([
+    DenseLayer(1, 10),
+    Tanh(),
+    DenseLayer(10, 1)
+])
+```
+
+👉 Muốn thêm layer?
+
+```python
+DenseLayer(10, 20)
+```
+
+👉 **Không đổi code train**
+👉 **Không đổi code backprop**
+
+---
+
+## 3.5 Câu chốt trong báo cáo (rất quan trọng)
+
+Thuy **nên viết nguyên câu này**:
+
+> “Thiết kế mạng theo hướng module hóa, mỗi layer tự quản lý forward và backward, giúp mô hình dễ dàng mở rộng khi thay đổi số layer hoặc số lượng tham số mà không cần viết lại thuật toán huấn luyện.”
+
+---
+
+# 🎯 TÓM LẠI – NẾU THUY LÀM ĐÚNG 3 ĐIỀU NÀY
+
+| Yêu cầu thầy    | Mình đã giải bằng     |
+| --------------- | --------------------- |
+| Tính gradient   | Backprop + chain rule |
+| Không nói suông | Code Python chạy thật |
+| Tính thích nghi | OOP + danh sách layer |
+
+👉 **Đây là level “đúng tinh thần sách Landau”**, không phải deep learning hiện đại.
+

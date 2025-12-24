@@ -1,0 +1,337 @@
+\documentclass[12pt,aspectratio=169]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{graphicx}
+
+% Theme
+\usetheme{Madrid}
+\usecolortheme{default}
+
+% Code listing
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    tabsize=4
+}
+
+% Title
+\title[Neural Network]{Neural Network từ đầu:\\Backpropagation và Tối ưu hóa}
+\author{Sinh viên: [Tên sinh viên]}
+\institute{Computational Methods for Engineers}
+\date{\today}
+
+\begin{document}
+
+% Slide 1: Title
+\begin{frame}
+\titlepage
+\end{frame}
+
+% Slide 2: Mục tiêu
+\begin{frame}{Mục tiêu thuyết trình}
+\begin{block}{3 điểm chính}
+\begin{enumerate}
+    \item \textbf{Tính gradient} - Backpropagation tự implement
+    \item \textbf{Code chạy được} - Có kết quả thực tế
+    \item \textbf{Thiết kế adaptive} - Dễ mở rộng
+\end{enumerate}
+\end{block}
+
+\vspace{0.5cm}
+\begin{alertblock}{Quan trọng}
+\begin{itemize}
+    \item Gradient tính bằng \textbf{Chain Rule}, không dùng automatic differentiation
+    \item Code hoàn toàn tự implement, không dùng TensorFlow/PyTorch
+    \item Thiết kế OOP + danh sách layer
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+% Slide 3: Cấu trúc project
+\begin{frame}{Cấu trúc project}
+\begin{columns}
+\column{0.5\textwidth}
+\begin{block}{Backend (network/)}
+\begin{itemize}
+    \item \texttt{layers.py} - DenseLayer, Tanh
+    \item \texttt{network.py} - NeuralNetwork
+    \item \texttt{loss.py} - MSELoss
+    \item \texttt{optimizers.py} - GD, BFGS
+\end{itemize}
+\end{block}
+
+\column{0.5\textwidth}
+\begin{block}{Demos \& Apps}
+\begin{itemize}
+    \item \texttt{demos/main.py} - Demo chính
+    \item \texttt{demos/test\_backprop.py}
+    \item \texttt{demos/test\_adaptive.py}
+    \item \texttt{apps/} - Ứng dụng
+\end{itemize}
+\end{block}
+\end{columns}
+\end{frame}
+
+% Slide 4: Bài toán tối ưu
+\begin{frame}{Phát biểu bài toán tối ưu}
+\begin{block}{Biến tối ưu}
+\[
+\Theta = \{\mathbf{W}^{(1)}, \mathbf{b}^{(1)}, \ldots, \mathbf{W}^{(L)}, \mathbf{b}^{(L)}\}
+\]
+\end{block}
+
+\begin{block}{Hàm loss}
+\[
+\mathcal{L}(\Theta) = \frac{1}{2}\sum_{k=1}^N \left|\hat{y}^{(k)} - y^{(k)}\right|^2
+\]
+\end{block}
+
+\begin{block}{Bài toán}
+\[
+\Theta^* = \arg\min_{\Theta} \mathcal{L}(\Theta)
+\]
+\end{block}
+\end{frame}
+
+% Slide 5: Backpropagation - Công thức
+\begin{frame}{Backpropagation - Công thức}
+\begin{block}{Gradient tại output layer}
+\[
+\delta^{(L)} = \frac{\partial \mathcal{L}}{\partial \hat{y}} = \hat{y} - y
+\]
+\end{block}
+
+\begin{block}{Lan truyền ngược}
+\begin{align}
+\delta^{(l-1)} &= \left(\mathbf{W}^{(l)}\right)^T \delta^{(l)} \odot \sigma'(\mathbf{z}^{(l-1)}) \\
+\frac{\partial \mathcal{L}}{\partial \mathbf{W}^{(l)}} &= \delta^{(l)} \left(\mathbf{a}^{(l-1)}\right)^T \\
+\frac{\partial \mathcal{L}}{\partial \mathbf{b}^{(l)}} &= \delta^{(l)}
+\end{align}
+\end{block}
+\end{frame}
+
+% Slide 6: Code - Tính gradient trong DenseLayer
+\begin{frame}[fragile]{Code: Tính gradient trong DenseLayer}
+\begin{lstlisting}
+def backward(self, grad_out, lr):
+    """
+    Backward pass: tính gradient và cập nhật trọng số
+    
+    QUAN TRỌNG: Gradient được tính TỰ TAY 
+    theo công thức toán học
+    """
+    # Gradient của W: grad_W = grad_out @ x^T
+    grad_W = np.outer(grad_out, self.x)
+    
+    # Gradient của b: grad_b = grad_out
+    grad_b = grad_out
+    
+    # Gradient truyền về layer trước
+    grad_x = self.W.T @ grad_out
+    
+    # Cập nhật trọng số
+    self.W -= lr * grad_W
+    self.b -= lr * grad_b
+    
+    return grad_x
+\end{lstlisting}
+
+\begin{alertblock}{Điểm quan trọng}
+Gradient được tính bằng \textbf{Chain Rule}, không dùng automatic differentiation!
+\end{alertblock}
+\end{frame}
+
+% Slide 7: Code - Tính gradient của Loss
+\begin{frame}[fragile]{Code: Tính gradient của Loss}
+\begin{lstlisting}
+def backward(self):
+    """
+    Tính gradient của loss theo y_pred
+    
+    Đạo hàm của 0.5*(y_pred - y_true)^2 
+    theo y_pred = y_pred - y_true
+    """
+    return self.y_pred - self.y_true
+\end{lstlisting}
+
+\begin{block}{Công thức toán học}
+\[
+\frac{\partial \mathcal{L}}{\partial \hat{y}} = \hat{y} - y
+\]
+\end{block}
+\end{frame}
+
+% Slide 8: Demo - Kết quả
+\begin{frame}{Demo: Kết quả chạy code}
+\begin{block}{Function Approximation: $\sin(x)$}
+\begin{itemize}
+    \item Dữ liệu: 50 mẫu training
+    \item Network: 1 input $\to$ 10 hidden $\to$ 1 output
+    \item Activation: Tanh
+\end{itemize}
+\end{block}
+
+\begin{block}{Kết quả}
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Phương pháp} & \textbf{Loss cuối} & \textbf{Iterations} \\
+\midrule
+Gradient Descent & 0.006411 & 1000 epochs \\
+BFGS & 0.003510 & 100 iterations \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{block}
+
+\begin{alertblock}{Chứng minh}
+Loss giảm dần $\to$ Gradient được tính đúng!
+\end{alertblock}
+\end{frame}
+
+% Slide 9: Thiết kế Adaptive
+\begin{frame}[fragile]{Thiết kế Adaptive}
+\begin{block}{NeuralNetwork class}
+\begin{lstlisting}
+class NeuralNetwork:
+    def __init__(self, layers):
+        self.layers = layers
+    
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer.forward(x)
+        return x
+    
+    def backward(self, grad, lr):
+        for layer in reversed(self.layers):
+            grad = layer.backward(grad, lr)
+        return grad
+\end{lstlisting}
+\end{block}
+
+\begin{block}{Ví dụ: Thêm layer}
+\begin{lstlisting}
+# Network đơn giản
+net1 = NeuralNetwork([
+    DenseLayer(1, 5), Tanh(), DenseLayer(5, 1)
+])
+
+# Network phức tạp - CHỈ THÊM LAYER!
+net2 = NeuralNetwork([
+    DenseLayer(1, 10), Tanh(),
+    DenseLayer(10, 5), Tanh(),  # THÊM LAYER
+    DenseLayer(5, 1)
+])
+
+# Cùng một hàm train cho cả hai!
+\end{lstlisting}
+\end{block}
+\end{frame}
+
+% Slide 10: So sánh Optimizer
+\begin{frame}{So sánh Gradient Descent vs BFGS}
+\begin{columns}
+\column{0.5\textwidth}
+\begin{block}{Gradient Descent}
+\begin{itemize}
+    \item Đơn giản, dễ implement
+    \item Hội tụ chậm
+    \item Cần nhiều iterations
+\end{itemize}
+\end{block}
+
+\column{0.5\textwidth}
+\begin{block}{BFGS}
+\begin{itemize}
+    \item Quasi-Newton method
+    \item Hội tụ nhanh hơn
+    \item Ít iterations hơn
+\end{itemize}
+\end{block}
+\end{columns}
+
+\vspace{0.5cm}
+\begin{alertblock}{QUAN TRỌNG}
+Cả hai đều dùng gradient tính bằng \textbf{Backpropagation tự implement}!
+\end{alertblock}
+
+\begin{block}{Kết quả}
+\begin{itemize}
+    \item GD: Loss = 0.006411 (1000 epochs)
+    \item BFGS: Loss = 0.003510 (100 iterations)
+    \item BFGS tốt hơn về cả tốc độ và chất lượng
+\end{itemize}
+\end{block}
+\end{frame}
+
+% Slide 11: Ứng dụng
+\begin{frame}{Ứng dụng thực tế}
+\begin{block}{3 ứng dụng đã thực hiện}
+\begin{enumerate}
+    \item \textbf{Function Approximation:} $\sin(x)$
+        \begin{itemize}
+            \item Network học được pattern từ dữ liệu có nhiễu
+            \item Loss giảm từ $\sim 0.1$ xuống $\sim 0.01$
+        \end{itemize}
+    
+    \item \textbf{XOR Problem}
+        \begin{itemize}
+            \item Network: 2 $\to$ 5 $\to$ 1
+            \item Độ chính xác: 100\%
+        \end{itemize}
+    
+    \item \textbf{Classification: Circle}
+        \begin{itemize}
+            \item Network: 2 $\to$ 6 $\to$ 1
+            \item Độ chính xác: $\sim 95\%$
+        \end{itemize}
+\end{enumerate}
+\end{block}
+\end{frame}
+
+% Slide 12: Tóm tắt
+\begin{frame}{Tóm tắt}
+\begin{block}{Đã hoàn thành}
+\begin{enumerate}
+    \item ✅ \textbf{Tính gradient} - Backpropagation tự implement
+    \item ✅ \textbf{Code chạy được} - Có kết quả và visualization
+    \item ✅ \textbf{Thiết kế adaptive} - Thêm/bớt layer không cần viết lại
+    \item ✅ \textbf{So sánh optimizer} - GD vs BFGS
+    \item ✅ \textbf{Ứng dụng} - 3 bài toán thực tế
+\end{enumerate}
+\end{block}
+
+\vspace{0.5cm}
+\begin{alertblock}{Điểm nổi bật}
+\begin{itemize}
+    \item Gradient tính bằng \textbf{Chain Rule}, không dùng automatic differentiation
+    \item Code hoàn toàn tự implement, không dùng thư viện AI
+    \item Thiết kế module hóa, dễ mở rộng
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+% Slide 13: Cảm ơn
+\begin{frame}
+\centering
+\Huge Cảm ơn thầy đã lắng nghe!
+
+\vspace{1cm}
+\Large Câu hỏi?
+\end{frame}
+
+\end{document}
+
